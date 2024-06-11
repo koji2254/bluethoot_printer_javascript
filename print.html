@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Grocery Receipt</title>
+   <style>
+      .receipt {
+         font-family: Arial, sans-serif;
+         width: 55mm;
+         border: 1px solid #000;
+         padding: 10px;
+         margin: auto;
+         text-align: center;
+      }
+      .receipt h1 {
+         font-size: 24px;
+         margin: 0;
+      }
+      .receipt h2 {
+         font-size: 18px;
+         margin: 10px 0;
+      }
+      .receipt p {
+         margin: 5px 0;
+      }
+      .receipt table {
+         width: 100%;
+         border-collapse: collapse;
+         margin-top: 10px;
+         text-align: left;
+      }
+      .receipt th, .receipt td {
+         padding: 5px 0;
+         border-bottom: 1px solid #000;
+      }
+      .receipt th {
+         font-weight: bold;
+      }
+      .receipt tfoot td {
+         border-top: 1px dashed #000;
+         font-weight: bold;
+      }
+      .receipt .total {
+         font-weight: bold;
+      }
+      .receipt .thanks {
+         margin-top: 20px;
+      }
+   </style>
+</head>
+<body>
+   <div class="receipt" id="receipt">
+      <h1>Tari Gas</h1>
+      <h2>Udun Wada, Jos</h2>
+      <p>Phone: 090393783</p>
+      <table>
+         <thead>
+            <tr>
+               <th>Item</th>
+               <th>Price</th>
+            </tr>
+         </thead>
+         <tbody id="receipt-body">
+            <!-- Items will be dynamically inserted here -->
+         </tbody>
+         <tfoot>
+            <tr>
+               <td>Total</td>
+               <td id="total-price">₦0.00</td>
+            </tr>
+         </tfoot>
+      </table>
+      <p id="payment-status">Payment Status: </p>
+      <p class="thanks">Thanks for your patronage</p>
+   </div>
+   <button onclick="printReceipt()">Print Receipt</button>
+
+   <script>
+      function generateReceipt() {
+         const receiptItems = [
+            { name: 'Gas 2k', price: 2300 }
+         ];
+
+         let total = 0;
+         let receiptBody = '';
+
+         receiptItems.forEach(item => {
+            receiptBody += `<tr><td>${item.name}</td><td>₦${item.price.toFixed(2)}</td></tr>`;
+            total += item.price;
+         });
+
+         document.getElementById('receipt-body').innerHTML = receiptBody;
+         document.getElementById('total-price').innerText = `₦${total.toFixed(2)}`;
+         document.getElementById('payment-status').innerText = 'Payment Status: Paid';
+
+         // ESC/POS commands for formatting
+         const ESC = '\x1b';
+         const GS = '\x1d';
+         const newLine = '\n';
+         const boldOn = `${ESC}E\x01`;
+         const boldOff = `${ESC}E\x00`;
+         const centerAlign = `${ESC}a\x01`;
+         const leftAlign = `${ESC}a\x00`;
+         const borderTopBottom = `${GS}v\x00\x01`;
+         const borderBottom = `${GS}v\x00\x02`;
+
+         return `${centerAlign}${boldOn}${boldOff}${newLine}`+
+                `${centerAlign}${boldOn}Tari Gas${boldOff}${newLine}` +
+                `${boldOn}Udun Wada, Jos${boldOff}${newLine}` +
+                `Phone: 090393783${newLine}${newLine}` +
+                `${centerAlign}${boldOn}*****************************${boldOff}${newLine}`+
+                `${leftAlign}${receiptItems.map(item => `${item.name}: ${item.price.toFixed(2)}`).join(newLine)}${newLine}${newLine}` +
+                `${boldOn}Total: #${total.toFixed(2)}${boldOff}${newLine}${newLine}` +
+                `${centerAlign}${boldOn}******************************${boldOff}${newLine}`+
+                `${centerAlign}Thanks for your patronage${newLine}${newLine}${newLine}`;
+      }
+
+      async function printReceipt() {
+         try {
+            const receiptData = generateReceipt();
+
+            // Request a Bluetooth device
+            const device = await navigator.bluetooth.requestDevice({
+               acceptAllDevices: true,
+               optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb'] // Serial Port Service UUID or specific service UUID
+            });
+
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb'); // Use the correct service UUID for your printer
+            const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb'); // Use the correct characteristic UUID for your printer
+
+            // Write to the characteristic in chunks to avoid data loss
+            const encoder = new TextEncoder();
+            const chunkSize = 20; // Adjust chunk size as needed
+            for (let i = 0; i < receiptData.length; i += chunkSize) {
+               const chunk = receiptData.substring(i, i + chunkSize);
+               await characteristic.writeValue(encoder.encode(chunk));
+            }
+
+            // Send newline characters to ensure the print finishes
+            const newline = encoder.encode('\n\n\n');
+            await characteristic.writeValue(newline);
+
+            alert('Receipt printed successfully!');
+         } catch (error) {
+            console.error('Error printing receipt:', error);
+            alert('Failed to print receipt. Check console for details.');
+         }
+      }
+   </script>
+</body>
+</html>
